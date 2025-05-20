@@ -2,65 +2,83 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-# Show the page title and description.
-st.set_page_config(page_title="Movies dataset", page_icon="🎬")
-st.title("🎬 Movies dataset")
+# Configure the Streamlit page
+st.set_page_config(page_title="Website Emissions Dashboard", page_icon="🌿")
+
+# Title and description
+st.title("🌿 Website Emissions Dashboard")
 st.write(
     """
-    This app visualizes data from [The Movie Database (TMDB)](https://www.kaggle.com/datasets/tmdb/tmdb-movie-metadata).
-    It shows which movie genre performed best at the box office over the years. Just 
-    click on the widgets below to explore!
+    This app visualizes website emissions data using Google's Lighthouse Emissions metrics.
+    Explore how different websites perform in terms of their carbon footprint and environmental impact.
+    Use the widgets below to filter and analyze the data!
     """
 )
 
-
-# Load the data from a CSV. We're caching this so it doesn't reload every time the app
-# reruns (e.g. if the user interacts with the widgets).
+# Load the data with caching
 @st.cache_data
 def load_data():
-    df = pd.read_csv("data/movies_genres_summary.csv")
+    df = pd.read_csv("data/website_emissions_summary.csv")
     return df
-
 
 df = load_data()
 
-# Show a multiselect widget with the genres using `st.multiselect`.
-genres = st.multiselect(
-    "Genres",
-    df.genre.unique(),
-    ["Action", "Adventure", "Biography", "Comedy", "Drama", "Horror"],
+# Widgets for filtering
+categories = st.multiselect(
+    "Select Website Categories",
+    options=df["category"].unique(),
+    default=list(df["category"].unique())[:3],  # default to first 3 categories
 )
 
-# Show a slider widget with the years using `st.slider`.
-years = st.slider("Years", 1986, 2006, (2000, 2016))
+years = st.slider(
+    "Select Year Range",
+    int(df["year"].min()),
+    int(df["year"].max()),
+    (int(df["year"].min()), int(df["year"].max())),
+)
 
-# Filter the dataframe based on the widget input and reshape it.
-df_filtered = df[(df["genre"].isin(genres)) & (df["year"].between(years[0], years[1]))]
+# Filter data based on widget inputs
+df_filtered = df[
+    (df["category"].isin(categories)) &
+    (df["year"].between(years[0], years[1]))
+]
+
+# Pivot data to have years as index and categories as columns with mean emissions
 df_reshaped = df_filtered.pivot_table(
-    index="year", columns="genre", values="gross", aggfunc="sum", fill_value=0
-)
-df_reshaped = df_reshaped.sort_values(by="year", ascending=False)
+    index="year",
+    columns="category",
+    values="emissions",
+    aggfunc="mean",
+    fill_value=0
+).sort_index()
 
-
-# Display the data as a table using `st.dataframe`.
+# Display the filtered data as a table
 st.dataframe(
     df_reshaped,
     use_container_width=True,
     column_config={"year": st.column_config.TextColumn("Year")},
 )
 
-# Display the data as an Altair chart using `st.altair_chart`.
+# Prepare data for Altair chart
 df_chart = pd.melt(
-    df_reshaped.reset_index(), id_vars="year", var_name="genre", value_name="gross"
+    df_reshaped.reset_index(),
+    id_vars="year",
+    var_name="category",
+    value_name="emissions"
 )
+
+# Create the emissions line chart
 chart = (
     alt.Chart(df_chart)
     .mark_line()
     .encode(
-        x=alt.X("year:N", title="Year"),
-        y=alt.Y("gross:Q", title="Gross earnings ($)"),
-        color="genre:N",
+        x=alt.X("year:O", title="Year"),
+        y=alt.Y("emissions:Q", title="Average Emissions (gCO2)"),
+        color=alt.Color("category:N", title="Website Category"),
+        tooltip=["year", "category", "emissions"],
     )
     .properties(height=320)
 )
+
+# Show the chart in the app
 st.altair_chart(chart, use_container_width=True)
